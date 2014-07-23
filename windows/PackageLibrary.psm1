@@ -7,7 +7,7 @@ param (
 # I don't know how to export a list to callers directly so simply return
 # the list of packages as a string array
 function Get-Packages {
-  return "Cygwin","NSIS","NSISAdvancedLogging","7Zip","DotNet45","WinDDK710","SqlSce32", "SqlSce64", "VS2012", "Win8SDK", "Wix", "CAPICOM", "WDK8", "VS2012U4", "PathAdditions"
+  return "Cygwin","NSIS","NSISAdvancedLogging","7Zip","DotNet45","WinDDK6001", "WinDDK710","SqlSce32", "SqlSce64", "VS2012", "Win8SDK", "Wix", "CAPICOM", "WDK8", "VS2012U4", "PathAdditions"
 }
 
 # powershell inspects to import only installed modules
@@ -131,6 +131,26 @@ function Install-DotNet45 {
   $dnsetup = $env:temp + "\dotnet45.exe"
   PerformDownload "http://download.microsoft.com/download/E/2/1/E21644B5-2DF2-47C2-91BD-63C560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe" $dnsetup "6C-2C-58-91-32-E8-30-A1-85-C5-F4-0F-82-04-2B-EE-30-22-E7-21-A2-16-68-0B-D9-B3-99-5B-A8-6F-37-81"
   Invoke-CommandChecked $dnsetup /passive /norestart 
+}
+
+function Test-WinDDK6001 {
+  if ($arch -eq "AMD64") {
+    $regPath = "HKLM:\Software\Wow6432Node\Microsoft\KitSetup\configured-kits\{B4285279-1846-49B4-B8FD-B9EAF0FF17DA}\{515A5454-555D-5459-5B5D-616264656660}"
+  } else {
+    $regPath = "HKLM:\Software\Microsoft\KitSetup\configured-kits\{B4285279-1846-49B4-B8FD-B9EAF0FF17DA}\{515A5454-555D-5459-5B5D-616264656660}"
+  }
+  $version = (Get-ItemProperty $regPath -Name "kit-version-major" -ErrorAction SilentlyContinue)."kit-version-major"
+  return ($version -eq 6)
+}
+
+function Install-WinDDK6001 {
+  $iso = $env:temp + "\wdk6001.18002.iso"
+  Write-Host "WARNING: we want DDK 6001.18002 which appears no longer to be available from Microsft. Using a private copy only available in a few places."
+  PerformDownload "http://www.cam.xci-test.com/xc_dist/winbuild/Version001/WinDDK.6001.18002/6.1.6001.18002.081017-1400_wdksp-WDK18002SP_EN_DVD.iso" $iso "6E-A6-DB-31-BF-5A-70-4F-15-C3-D5-EE-95-A0-3C-B7-00-75-26-57-13-05-80-CE-AF-10-3E-70-1C-29-EB-EB"
+  $folderunpacked = $env:temp + "\win6ddk-unpacked"
+  & ($programFiles32 +'\7-Zip\7z.exe') "x" "-y" "-o$folderunpacked" $iso
+  $setup = $folderunpacked + "\KitSetup.exe"
+  Invoke-CommandChecked $setup /install ALL /ui-level EXPRESS
 }
 
 function Test-WinDDK710 {
