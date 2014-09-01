@@ -1,0 +1,10 @@
+# the first line is the default branch for when our branch does not exist in a repo
+master
+
+# the remaining lines are a list repositories that should get tagged
+openxt
+xc-windows
+msi-installer
+win-tools
+idl
+xc-vusb
