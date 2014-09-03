@@ -4,6 +4,7 @@ param (
   [string]$user,
   [string]$branch,
   [string]$certname,
+  [string]$rsyncdest,
   [string]$buildtype="openxtwin",
   [string]$gitbin="C:\Program Files\Git\bin\git.exe",
   [string]$pythonbin="C:\Python27\python.exe"
@@ -16,6 +17,10 @@ Import-Module $mywd\BuildSupport\invoke.psm1
 
 Write-Host "Site $site build directory $builddirectory user $user gitbin [$gitbin]"
 $repos=$builddirectory+"\openxt-replica"
+if (! (Test-Path $builddirectory)) {
+  mkdir $builddirectory
+}
+
 Push-Location $builddirectory
 
 if (! (Test-Path scripts)) {
@@ -42,4 +47,14 @@ Push-Location openxt-$tag\windows
 Invoke-CommandChecked "checkout tag" $gitbin checkout $tag
 Invoke-CommandChecked "winbuild prepare" powershell .\winbuild-prepare.ps1 tag=$tag config=sample-config.xml build=$tagnum certname=$certname giturl=$repos build=$tagnum gitbin=$gitbin
 Invoke-CommandChecked "winbuild all" powershell .\winbuild-all.ps1
-
+Remove-Item -Recurse -Force xc-windows
+Remove-Item -Recurse -Force win-tools
+Remove-Item -Recurse -Force msi-installer
+Remove-Item -Recurse -Force idl
+if ($rsyncdest.Length -gt 0) {
+  $buildparent = Split-Path -Parent $builddirectory
+  push-location $buildparent
+  $buildname = (Split-Path -Leaf $builddirectory) + '/'
+  Invoke-CommandChecked "rsync upload" rsync --chmod=ugo=rwX -r $buildname $rsyncdest
+  pop-location
+}
