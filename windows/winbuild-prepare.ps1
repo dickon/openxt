@@ -15,7 +15,7 @@ Set-Location $mywd
 # Top level usage help for winbuild-prepare.ps1 and winbuild-all.ps1
 function usage([string]$cmdinv)
 {
-    Write-Host $cmdinv ": Must supply config, tag and build args"
+    Write-Host $cmdinv ": Must supply config, certname and build args"
     Write-Host "Usage:"
     Write-Host "  config=<config-file>"
     Write-Host "  branch=<build-branch> [optional, default is master]"
