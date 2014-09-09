@@ -11,6 +11,7 @@ Set-Location $mywd
 
 # Import useful functions into prepare
 . ".\BuildSupport\winbuild-utils.ps1"
+Import-Module $mywd\BuildSupport\checked-copy.psm1
 
 # Top level usage help for winbuild-prepare.ps1 and winbuild-all.ps1
 function usage([string]$cmdinv)
@@ -63,11 +64,6 @@ function update-config-file($argtable)
     Write-Output "Version File Contents:"
     $versionValues | Out-String | Write-Output
 
-    # This argument has to be here as it is used to calculate values we need
-    if ($argtable["build"].Length -lt 1)
-    {
-        throw "No build number value specified in the input!"
-    }
     if (($argtable["branch"] -gt 0) -and ($argtable["tag"] -gt 0)) {
         throw "Specify either branch $branch or tag $tag but not both"
     }
@@ -89,22 +85,10 @@ function update-config-file($argtable)
     update-version-value -name "VerMicro" -value $versionValues["XC_TOOLS_MICRO"].replace('"', '')
     update-version-value -name "BuildNumber" -value $argtable["build"]
 
-    if ($argtable["branch"].Length -gt 0)
-    {
-        $ret = write-config-value -config $global:cfgfile -name "BuildBranch" -value $argtable["branch"]
-        if (!$ret)
-        {
-            throw "Failed to update config file with branch value!"
-        }
-    }
-
-    if ($argtable["tag"].Length -gt 0)
-    {
-        $ret = write-config-value -config $global:cfgfile -name "BuildTag" -value $argtable["tag"]
-        if (!$ret)
-        {
-            throw "Failed to update config file with tag value!"
-        }
+    write-config-value-if-set BuildBranch $argtable["branch"]
+    write-config-value-if-set BuildTag $argtable["tag"]
+    if (($argtable["branch"].Length -lt 1) -and ($argtable["tag"].Length -lt 1)) {
+        write-config-value-if-set BuildBranch master
     }
 
     $ret = write-config-value -config $global:cfgfile -name "VerString" -value (get-version-string)
@@ -118,21 +102,15 @@ function update-config-file($argtable)
         $typeval = ""
         if ($argtable["type"].ToLower().CompareTo("release") -eq 0)
         {
-            $typeval = "Release"
+	    write-config-value-if-set BuildType Release
         }
-        if ($argtable["type"].ToLower().CompareTo("debug") -eq 0)
+        ElseIf ($argtable["type"].ToLower().CompareTo("debug") -eq 0)
         {
-            $typeval = "Debug"
+ 	    write-config-value-if-set BuildType Debug
         }
-        if ($typeval.Length -eq 0)
+        Else
         {
             throw ("Invalid build signing value! - value: " + $argtable["type"])
-        }
-
-        $ret = write-config-value -config $global:cfgfile -name "BuildType" -value $typeval
-        if (!$ret)
-        {
-            throw "Failed to update config file with build type! - value: $typeval"
         }
     }
 
@@ -141,32 +119,20 @@ function update-config-file($argtable)
         $devmode = ""
         if ($argtable["developer"].ToLower().CompareTo("false") -eq 0)
         {
-            $devmode = "false"
+            write-config-value Developer false
         }
-        if ($argtable["developer"].ToLower().CompareTo("true") -eq 0)
+        ElseIf ($argtable["developer"].ToLower().CompareTo("true") -eq 0)
         {
-            $devmode = "true"
+	    write-config-value Developer true
         }
-        if ($devmode.Length -eq 0)
+        else
         {
             throw ("Invalid build developer mode value! - value: " + $argtable["developer"])
         }
 
-        $ret = write-config-value -config $global:cfgfile -name "Developer" -value $devmode
-        if (!$ret)
-        {
-            throw "Failed to update config file with developer flag! - value: $devmode"
-        }
     }
 
-    if ($argtable["certname"].Length -gt 0)
-    {
-        $ret = write-config-value -config $global:cfgfile -name "CertName" -value $argtable["certname"]
-        if (!$ret)
-        {
-            throw ("Failed to update config file with signing certificate name! - value: " + $argtable["certname"])
-        }
-    }
+    write-config-value-if-set CertName $argtable["certname"]
 
     if ($argtable["license"].Length -gt 0)
     {
@@ -175,11 +141,7 @@ function update-config-file($argtable)
             throw ("Failed to locate license file! - value: " + $argtable["license"])
         }
 
-        $ret = write-config-value -config $global:cfgfile -name "License" -value $argtable["license"]
-        if (!$ret)
-        {
-            throw ("Failed to update config file with license file! - value: " + $argtable["license"])
-        }
+        write-config-value-if-set License $argtable["license"]
     }
 
     # Update "Program Files" to "Program Files (x86)" for VS running on x64 machine.
@@ -196,15 +158,7 @@ function update-config-file($argtable)
         }
     }
 
-    if ($argtable["giturl"].Length -gt 0) 
-    {
-        $ret = write-config-value -config $global:cfgfile -name "GitUrl" -value $argtable["giturl"]
-        if (!$ret)
-        {
-            throw ("Failed to update config file with giturl! - value: " + $argtable["giturl"])
-        }
-         
-    }
+    write-config-value-if-set GitUrl $argtable["giturl"]
 }
 
 # Returns true if command found, false otherwise
@@ -380,19 +334,24 @@ function pre-main($argtable)
 {
     $config = $argtable["config"]
     if ($config.Length -lt 1)
-    {
-        throw "No config file value specified"
-        ExitWithCode -exitcode $global:failure
+    { 
+        $config = "sample-config.xml"
     }
 
     #Copy the selected config to build root
-    Copy-Item -Path ".\config\$config" -Destination ".\config.xml"
+    $src = ".\config\$config"
     $config = ".\config.xml"
+
+    if (!(Test-Path -path $src -PathType Leaf)) {
+        throw "config file $src not found"
+    }
+
+    Checked-Copy $src $config
 
     #Check that there was a config and that it copied ok
     if (!(Test-Path -Path $config -PathType Leaf))
     {
-        throw "Config file not found - config: $config"
+        throw "Config file copy failed: $config"
     }
     
     # Set full path to config file
@@ -455,12 +414,6 @@ function winbuild-main([string]$cmdinv, $argtable)
 ##### Begin script, do some basic checks, call main #####
 #########################################################
 if (($args.Length -eq 1) -and ($args[0].ToLower().CompareTo("--help") -eq 0))
-{
-    usage -cmdinv $MyInvocation.MyCommand.Name
-    ExitWithCode -exitcode $global:failure
-}
-
-if (($args.Length -lt 2) -or ($args.Length -gt 12))
 {
     usage -cmdinv $MyInvocation.MyCommand.Name
     ExitWithCode -exitcode $global:failure

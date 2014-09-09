@@ -67,6 +67,19 @@ function write-config-value([string]$config, [string]$name, [string]$value)
     return $true
 }
 
+function write-config-value-if-set([string]$key, [string]$value)
+{
+    if ($value.Length -gt 0) {
+        $ret = write-config-value -config $global:cfgfile -name $key -value $value
+        if (! ($ret))
+        {
+             throw "Failed to update config file with $key value [$value]"
+        }
+    } else {
+        Write-Host "No value specified for $key so leaving alone"
+    }
+}
+
 function enable-read-execute([string]$file)
 {
     $acl = Get-Acl $file
